@@ -74,7 +74,7 @@ fun AboutScreen() {
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = "MedMinder helps you keep track of your medications and schedules.",
+                    text = "MedMinder helps you keep track of your medications and schedules. It provides a simple and intuitive interface to manage your medication regimen and ensure you never miss a dose.",
                     style = MaterialTheme.typography.bodyLarge
                 )
 
@@ -92,6 +92,31 @@ fun AboutScreen() {
                 Text("• Record when you've taken your medication")
                 Text("• View your medication history")
                 Text("• Dark and light mode support")
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface,
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp)
+            ) {
+                Text(
+                    text = "Technology",
+                    style = MaterialTheme.typography.titleMedium
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "MedMinder is built using Kotlin Multiplatform and Compose Multiplatform for the UI, allowing it to run on Android, iOS, and Desktop platforms.",
+                    style = MaterialTheme.typography.bodyLarge
+                )
             }
         }
 
