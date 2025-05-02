@@ -1,0 +1,19 @@
+<svg viewBox="0 0 400 200" xmlns="http://www.w3.org/2000/svg">
+    <!-- Pill capsule -->
+    <g>
+        <!-- Left half of the pill (typically a different color) -->
+        <path d="M200,50 A100,50 0 0,0 100,100 A100,50 0 0,0 200,150 Z" fill="#f44336" />
+
+        <!-- Right half of the pill -->
+        <path d="M200,50 A100,50 0 0,1 300,100 A100,50 0 0,1 200,150 Z" fill="#ffffff" />
+
+        <!-- Pill body -->
+        <ellipse cx="200" cy="100" rx="100" ry="50" fill="none" stroke="#333333" stroke-width="2" />
+
+        <!-- Line dividing the two colors -->
+        <line x1="200" y1="50" x2="200" y2="150" stroke="#333333" stroke-width="2" />
+
+        <!-- Highlight effect -->
+        <ellipse cx="180" cy="85" rx="70" ry="30" fill="white" opacity="0.2" />
+    </g>
+</svg>
