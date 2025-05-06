@@ -1,5 +1,6 @@
 package gy.roach.json.medminder.db
 
+import gy.roach.json.medminder.Platform
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -149,6 +150,7 @@ data class MedicationReminderData(
  */
 class MedicationRepository(
     private val fileStorage: FileStorage,
+    private val platform: Platform? = null,
     private val coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.Default)
 ) {
     private val json = Json { prettyPrint = true }
@@ -435,6 +437,31 @@ class MedicationRepository(
                 )
             }
 
+            // Schedule notifications for iOS
+            if (platform != null) {
+                // Get the medication name
+                val medication = _medications.value.find { it.id == medicationId }
+                if (medication != null) {
+                    // Parse the time
+                    val timeParts = time.split(":")
+                    if (timeParts.size == 2) {
+                        val hour = timeParts[0].toInt()
+                        val minute = timeParts[1].toInt()
+
+                        // Parse the days of week
+                        val daysOfWeekList = daysOfWeek.split(",").map { it.trim().toInt() }
+
+                        // Schedule the notification
+                        platform.scheduleMedicationNotification(
+                            medicationName = medication.name,
+                            hour = hour,
+                            minute = minute,
+                            daysOfWeek = daysOfWeekList
+                        )
+                    }
+                }
+            }
+
             newId
         }
     }
@@ -479,6 +506,31 @@ class MedicationRepository(
                         scheduledTime = time,
                         scheduledDate = todayString
                     )
+                }
+
+                // Schedule notifications for iOS
+                if (platform != null) {
+                    // Get the medication name
+                    val medication = _medications.value.find { it.id == medicationId }
+                    if (medication != null) {
+                        // Parse the time
+                        val timeParts = time.split(":")
+                        if (timeParts.size == 2) {
+                            val hour = timeParts[0].toInt()
+                            val minute = timeParts[1].toInt()
+
+                            // Parse the days of week
+                            val daysOfWeekList = daysOfWeek.split(",").map { it.trim().toInt() }
+
+                            // Schedule the notification
+                            platform.scheduleMedicationNotification(
+                                medicationName = medication.name,
+                                hour = hour,
+                                minute = minute,
+                                daysOfWeek = daysOfWeekList
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -793,14 +845,20 @@ class MedicationRepository(
     }
 
     /**
-     * Count medications not taken for today.
+     * Count medications not taken for today where the current time is at least 10 minutes
+     * after the scheduled time.
      * This is used for badge notifications on iOS.
-     * @return The number of medications not taken for today.
+     * @return The number of medications not taken for today that are overdue by at least 10 minutes.
      */
     suspend fun countMedicationsNotTakenForToday(): Int {
         return withContext(Dispatchers.Default) {
-            // Get today's date in YYYY-MM-DD format
-            val today = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
+            // Get current time in epoch seconds
+            val now = Clock.System.now()
+            val currentEpochSeconds = now.toEpochMilliseconds() / 1000
+
+            // Get today's date and time
+            val currentDateTime = now.toLocalDateTime(TimeZone.currentSystemDefault())
+            val today = currentDateTime.date
             val todayString = "${today.year}-${today.monthNumber.toString().padStart(2, '0')}-${today.dayOfMonth.toString().padStart(2, '0')}"
 
             // Get today's day of week (1-7, where 1 is Monday)
@@ -814,17 +872,97 @@ class MedicationRepository(
             // Get all intakes for today
             val intakesForToday = _intakes.value.filter { it.scheduledDate == todayString }
 
-            // Count schedules that don't have a corresponding intake
+            // Count schedules that don't have a corresponding intake and are at least 10 minutes past due
             var count = 0
             for (schedule in schedulesForToday) {
                 val hasIntake = intakesForToday.any { 
                     it.scheduleId == schedule.id && it.scheduledDate == todayString 
                 }
+
                 if (!hasIntake) {
-                    count++
+                    try {
+                        // Convert schedule time to epoch seconds
+                        val scheduledDateTime = schedule.toLocalDateTime(todayString)
+                        val scheduledInstant = scheduledDateTime.toInstant(TimeZone.currentSystemDefault())
+                        val scheduledEpochSeconds = scheduledInstant.toEpochMilliseconds() / 1000
+
+                        // Add 10 minutes (600 seconds) to the scheduled time
+                        val tenMinutesAfterScheduleEpoch = scheduledEpochSeconds + 600
+
+                        // Only count if current time is at least 10 minutes after scheduled time
+                        if (currentEpochSeconds >= tenMinutesAfterScheduleEpoch) {
+                            count++
+                        }
+                    } catch (e: Exception) {
+                        // If there's an error parsing the time, skip this schedule
+                    }
                 }
             }
             count
+        }
+    }
+
+    /**
+     * Get medications not taken for today where the current time is at least 10 minutes
+     * after the scheduled time.
+     * This is used for desktop notifications.
+     * @return A list of medication data for medications not taken for today that are overdue by at least 10 minutes.
+     */
+    suspend fun getMedicationsNotTakenForToday(): List<Pair<MedicationData, MedicationScheduleData>> {
+        return withContext(Dispatchers.Default) {
+            // Get current time in epoch seconds
+            val now = Clock.System.now()
+            val currentEpochSeconds = now.toEpochMilliseconds() / 1000
+
+            // Get today's date and time
+            val currentDateTime = now.toLocalDateTime(TimeZone.currentSystemDefault())
+            val today = currentDateTime.date
+            val todayString = "${today.year}-${today.monthNumber.toString().padStart(2, '0')}-${today.dayOfMonth.toString().padStart(2, '0')}"
+
+            // Get today's day of week (1-7, where 1 is Monday)
+            val dayOfWeek = (today.dayOfWeek.ordinal + 1)
+
+            // Get all schedules for today
+            val schedulesForToday = _schedules.value.filter { schedule ->
+                schedule.daysOfWeek.split(",").map { it.trim().toInt() }.contains(dayOfWeek)
+            }
+
+            // Get all intakes for today
+            val intakesForToday = _intakes.value.filter { it.scheduledDate == todayString }
+
+            // Get medications not taken for today
+            val medicationsNotTaken = mutableListOf<Pair<MedicationData, MedicationScheduleData>>()
+
+            for (schedule in schedulesForToday) {
+                val hasIntake = intakesForToday.any { 
+                    it.scheduleId == schedule.id && it.scheduledDate == todayString 
+                }
+
+                if (!hasIntake) {
+                    try {
+                        // Convert schedule time to epoch seconds
+                        val scheduledDateTime = schedule.toLocalDateTime(todayString)
+                        val scheduledInstant = scheduledDateTime.toInstant(TimeZone.currentSystemDefault())
+                        val scheduledEpochSeconds = scheduledInstant.toEpochMilliseconds() / 1000
+
+                        // Add 10 minutes (600 seconds) to the scheduled time
+                        val tenMinutesAfterScheduleEpoch = scheduledEpochSeconds + 600
+
+                        // Only include if current time is at least 10 minutes after scheduled time
+                        if (currentEpochSeconds >= tenMinutesAfterScheduleEpoch) {
+                            // Find the medication for this schedule
+                            val medication = _medications.value.find { it.id == schedule.medicationId }
+                            if (medication != null) {
+                                medicationsNotTaken.add(Pair(medication, schedule))
+                            }
+                        }
+                    } catch (e: Exception) {
+                        // If there's an error parsing the time, skip this schedule
+                    }
+                }
+            }
+
+            medicationsNotTaken
         }
     }
 }

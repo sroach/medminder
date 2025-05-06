@@ -55,7 +55,8 @@ kotlin {
             implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
 
             // icon extended
-            implementation("org.jetbrains.compose.material:material-icons-extended:${libs.versions.compose.multiplatform.get()}")
+            implementation("org.jetbrains.compose.material:material-icons-core:1.6.11")
+            implementation("org.jetbrains.compose.material:material-icons-extended:1.7.3")
         }
         desktopMain.dependencies {
             implementation(compose.desktop.currentOs)
@@ -79,7 +80,8 @@ compose.desktop {
             packageName = "gy.roach.json.medminder"
             packageVersion = "1.0.0"
             macOS {
-                iconFile.set(project.file("composeApp/src/desktopMain/resources/medminder.icns"))
+                iconFile.set(project.file("desktopAppIcons/medminder.icns"))
+                bundleID = "gy.roach.json.medminder.desktopApp"
             }
         }
     }

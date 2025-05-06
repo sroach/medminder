@@ -389,11 +389,50 @@ fun ScheduleItem(
                     )
 
                     if (isTaken) {
-                        Text(
-                            text = "✓ Taken",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.Gray
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "✓ Taken",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.Gray
+                            )
+
+                            // Undo button
+                            TextButton(
+                                onClick = {
+                                    scope.launch {
+                                        // Find the intake record for this schedule and today
+                                        val intakeToDelete = intakes.firstOrNull { 
+                                            it.medicationId == schedule.medicationId && 
+                                            it.scheduleId == schedule.id && 
+                                            it.scheduledDate == today &&
+                                            it.taken
+                                        }
+
+                                        // Delete the intake record if found
+                                        if (intakeToDelete != null) {
+                                            repository.deleteIntake(intakeToDelete.id)
+
+                                            // Refresh the intake status
+                                            intakes = repository.getIntakesForScheduleAndDateSync(schedule.id, today)
+                                            isTaken = intakes.any { 
+                                                it.medicationId == schedule.medicationId && 
+                                                it.scheduleId == schedule.id && 
+                                                it.scheduledDate == today &&
+                                                it.taken
+                                            }
+                                        }
+                                    }
+                                },
+                                colors = ButtonDefaults.textButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.primary
+                                )
+                            ) {
+                                Text("Undo")
+                            }
+                        }
                     }
                 }
 
@@ -500,7 +539,7 @@ fun ScheduleItem(
             if (isEditing) {
                 Spacer(modifier = Modifier.height(16.dp))
 
-                Divider()
+                HorizontalDivider(Modifier, DividerDefaults.Thickness, DividerDefaults.color)
 
                 Spacer(modifier = Modifier.height(8.dp))
 

@@ -42,9 +42,9 @@ private suspend fun updateBadgeCount(repository: MedicationRepository, platform:
 fun App() {
     // Create repositories
     val fileStorage = remember { createFileStorage() }
-    val repository = remember { MedicationRepository(fileStorage) }
-    val themeRepository = remember { ThemeRepository(fileStorage) }
     val platform = remember { getPlatform() }
+    val repository = remember { MedicationRepository(fileStorage, platform) }
+    val themeRepository = remember { ThemeRepository(fileStorage) }
 
     // State for navigation
     var selectedTab by remember { mutableStateOf(0) }
@@ -53,18 +53,41 @@ fun App() {
     val themePreferences by themeRepository.themePreferences.collectAsState()
     var showThemeDialog by remember { mutableStateOf(false) }
 
+    // State for medications not taken dialog (desktop only)
+    var showMedicationsNotTakenDialog by remember { mutableStateOf(false) }
+    var medicationsNotTaken by remember { mutableStateOf<List<Pair<gy.roach.json.medminder.db.MedicationData, gy.roach.json.medminder.db.MedicationScheduleData>>>(emptyList()) }
+
     // Coroutine scope for background tasks
     val scope = rememberCoroutineScope()
 
     // Update badge count when app starts
     LaunchedEffect(Unit) {
         updateBadgeCount(repository, platform)
+
+        // For desktop platform, check for medications not taken and show dialog
+        if (platform.name.startsWith("Java")) {
+            val notTaken = repository.getMedicationsNotTakenForToday()
+            if (notTaken.isNotEmpty()) {
+                medicationsNotTaken = notTaken
+                showMedicationsNotTakenDialog = true
+            }
+        }
     }
 
     // Update badge count when intakes change
     val intakes by repository.getAllIntakes().collectAsState(initial = emptyList())
     LaunchedEffect(intakes) {
         updateBadgeCount(repository, platform)
+
+        // For desktop platform, check for medications not taken and update dialog state
+        if (platform.name.startsWith("Java")) {
+            val notTaken = repository.getMedicationsNotTakenForToday()
+            medicationsNotTaken = notTaken
+            // Only show dialog if it's not already showing and there are medications not taken
+            if (notTaken.isNotEmpty() && !showMedicationsNotTakenDialog) {
+                showMedicationsNotTakenDialog = true
+            }
+        }
     }
 
     AppTheme(themeMode = themePreferences.themeMode) {
@@ -99,6 +122,14 @@ fun App() {
                 onDismiss = { showThemeDialog = false }
             )
         }
+
+        // Medications not taken dialog (desktop only)
+        if (showMedicationsNotTakenDialog && medicationsNotTaken.isNotEmpty()) {
+            MedicationsNotTakenDialog(
+                medicationsNotTaken = medicationsNotTaken,
+                onDismiss = { showMedicationsNotTakenDialog = false }
+            )
+        }
     }
 }
 
@@ -111,21 +142,22 @@ fun MedMinderTopBar(
     onThemeClick: () -> Unit = {},
     themeMode: ThemeMode = ThemeMode.SYSTEM
 ) {
-    val useDarkTheme = shouldUseDarkTheme(themeMode)
-    val iosTopBarColor = if (useDarkTheme) {
-        Color(0xFF1C1C1E).copy(alpha = 0.9f) // Dark mode
-    } else {
-        Color(0xFFF8F8F8).copy(alpha = 0.9f) // Light mode
-    }
-    CenterAlignedTopAppBar(
-        title = {
+    Surface(
+        color = MaterialTheme.colorScheme.background,
+        tonalElevation = 3.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, top = 32.dp, end = 16.dp, bottom = 16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text(
                 text = "MedMinder",
-                style = MaterialTheme.typography.headlineSmall
+                style = MaterialTheme.typography.titleLarge
             )
-        },
-        actions = {
-            // Theme toggle button
+
             IconButton(onClick = onThemeClick) {
                 Icon(
                     imageVector = Icons.Outlined.DarkMode,
@@ -133,12 +165,9 @@ fun MedMinderTopBar(
                     tint = MaterialTheme.colorScheme.onPrimaryContainer
                 )
             }
-        },
-        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-            containerColor = iosTopBarColor,
-            titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-        )
-    )
+        }
+    }
+
 }
 
 /**
@@ -238,6 +267,64 @@ fun ThemeSelectionDialog(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Dark")
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    )
+}
+
+/**
+ * Dialog for showing medications not taken for today
+ */
+@Composable
+fun MedicationsNotTakenDialog(
+    medicationsNotTaken: List<Pair<gy.roach.json.medminder.db.MedicationData, gy.roach.json.medminder.db.MedicationScheduleData>>,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Medications Not Taken Today") },
+        text = {
+            Column {
+                Text(
+                    "The following medications are overdue and have not been taken today:",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+
+                // List of medications not taken
+                medicationsNotTaken.forEach { (medication, schedule) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Medication name and dosage
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = medication.name,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            if (medication.description != null) {
+                                Text(
+                                    text = "Description: ${medication.description}",
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                            Text(
+                                text = "Scheduled time: ${schedule.time}",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
                 }
             }
         },
