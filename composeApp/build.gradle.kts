@@ -73,12 +73,15 @@ compose.desktop {
     application {
         mainClass = "gy.roach.json.medminder.MainKt"
 
-        jvmArgs += listOf("-Xdock:icon=${project.file("composeApp/src/desktopMain/resources/medminder.icns")}")
-
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "gy.roach.json.medminder"
             packageVersion = "1.0.0"
+
+            linux {
+                iconFile.set(project.file("desktopAppIcons/medminder.png"))
+            }
+
             macOS {
                 iconFile.set(project.file("desktopAppIcons/medminder.icns"))
                 bundleID = "gy.roach.json.medminder.desktopApp"
